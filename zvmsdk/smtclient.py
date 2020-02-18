@@ -2241,12 +2241,17 @@ class SMTClient(object):
         image_path = self._get_image_path_by_name(image_name)
         self._pathutils.clean_temp_folder(image_path)
 
-    def _get_image_last_access_time(self, image_name):
+    def _get_image_last_access_time(self, image_name, raise_exception=True):
         """Get the last access time of the image."""
         image_file = os.path.join(self._get_image_path_by_name(image_name),
                                   CONF.zvm.user_root_vdev)
         if not os.path.exists(image_file):
-            raise exception.SDKImageOperationError(rs=23, img=image_name)
+            if raise_exception:
+                msg = 'Failed to get time stamp of image:%s' % image_name
+                LOG.error(msg)
+                raise exception.SDKImageOperationError(rs=23, img=image_name)
+            else:
+                return -1  # An invalid timestamp
         atime = os.path.getatime(image_file)
         return atime
 
@@ -2256,25 +2261,10 @@ class SMTClient(object):
             # because database maybe None, so return nothing here
             return []
 
-        # if image_name is not None, means there is only one record
-        if image_name:
-            try:
-                last_access_time = self._get_image_last_access_time(image_name)
-            except exception.SDKImageOperationError:
-                msg = 'Failed to get time stamp of image:%s' % image_name
-                LOG.error(msg)
-                raise exception.SDKImageOperationError(rs=23, img=image_name)
-            image_info[0]['last_access_time'] = last_access_time
-        else:
-            for item in image_info:
-                image_name = item['imagename']
-                try:
-                    last_access_time = self._get_image_last_access_time(image_name)
-                except exception.SDKImageOperationError:
-                    msg = 'Failed to get time stamp of image:%s' % image_name
-                    LOG.error(msg)
-                    raise exception.SDKImageOperationError(rs=23, img=image_name)
-                item['last_access_time'] = last_access_time
+        for item in image_info:
+            last_access_time = self._get_image_last_access_time(
+                    item['imagename'], raise_exception=False)
+            item['last_access_time'] = last_access_time
         return image_info
 
     def image_get_root_disk_size(self, image_name):
